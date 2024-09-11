@@ -31,9 +31,9 @@ jobs:
                   echo "ZIP_FILE=$(basename -a *.zip)" >> $GITHUB_ENV
                   echo "ZIP_FILE_SHA256=$(sha256sum *.zip | cut -d' ' -f1)" >> $GITHUB_ENV
 
-                  large_files=$(find . -maxdepth 1 -type f -size +2G)
+                  large_files=$(find . -maxdepth 1 -type f -size +5G)
                   if [ -n "$large_files" ]; then
-                    echo -e "\n::warning:: Deleting files larger than 2 GB..."
+                    echo -e "\n::warning:: Deleting files larger than 5 GB..."
                     for file in $large_files; do
                       echo "$file ($(du -h "$file" | awk '{print $1}'))" && rm "$file"
                     done
