@@ -1,4 +1,4 @@
-name: Extract and Release
+name: Extract and Upload to Dropbox
 
 on:
     workflow_dispatch:
@@ -14,7 +14,7 @@ on:
                 default: "boot.img, dtbo.img, product.img, system.img, system_ext.img"
 
 jobs:
-    build-and-release:
+    build-and-upload:
         runs-on: ubuntu-latest
         permissions: write-all
         steps:
@@ -39,25 +39,19 @@ jobs:
                     done
                   fi
 
-            - name: Upload to Dropbox
-              uses: Lewuathe/dropbox-github-action@v1
-              with:
-                dropbox-app-key: ${{ secrets.DROPBOX_APP_KEY }}
-                dropbox-app-secret: ${{ secrets.DROPBOX_APP_SECRET }}
-                dropbox-refresh-token: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
-                source-path: './' 
-                target-path: '/ExtractedROMs/' 
+            - name: Find files to upload
+              id: file_list
+              run: |
+                  files=$(find . -maxdepth 1 -type f ! -size +5G)
+                  echo "::set-output name=files::$files"
 
-            - name: Create Release (sem arquivos)
-              uses: softprops/action-gh-release@v2
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  files: "" # Nenhum arquivo será anexado à release
-                  name: ${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
-                  tag_name: ${{ github.run_id }}
-                  body: |
-                      Device: ${{ github.event.inputs.DEVICE_NAME }}
-                      Filename: [${{ env.ZIP_FILE }}](${{ github.event.inputs.ROM_URL }})
-                      Extracted files: ${{ github.event.inputs.EXTRACTED_FILES }} (disponíveis no Dropbox)
-                      SHA256: ${{ env.ZIP_FILE_SHA256 }} 
+            - name: Upload files to Dropbox
+              run: |
+                for file in ${{ steps.file_list.outputs.files }}; do
+                  filename=$(basename "$file")
+                  curl -X POST https://content.dropboxapi.com/2/files/upload \
+                    --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
+                    --header "Dropbox-API-Arg: {\"path\": \"/${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}/$filename\",\"mode\": \"add\",\"autorename\": true,\"mute\": false,\"strict_conflict\": false}" \
+                    --header "Content-Type: application/octet-stream" \
+                    --data-binary @"$file"
+                done
