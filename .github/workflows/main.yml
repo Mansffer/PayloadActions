@@ -39,16 +39,23 @@ jobs:
                     done
                   fi
 
-            - name: Upload to Release
+            - name: Upload to Dropbox
+              uses: Lewuathe/dropbox-github-action@v1
+              with:
+                dropbox-access-token: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
+                source-file-or-folder-path: ${{ github.event.inputs.EXTRACTED_FILES }} 
+                destination-path: / 
+
+            - name: Create Release (sem arquivos)
               uses: softprops/action-gh-release@v2
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                  files: ${{ github.event.inputs.EXTRACTED_FILES }}
+                  files: "" # Nenhum arquivo será anexado à release
                   name: ${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}
                   tag_name: ${{ github.run_id }}
                   body: |
                       Device: ${{ github.event.inputs.DEVICE_NAME }}
                       Filename: [${{ env.ZIP_FILE }}](${{ github.event.inputs.ROM_URL }})
-                      Extracted files: ${{ github.event.inputs.EXTRACTED_FILES }}
-                      SHA256: ${{ env.ZIP_FILE_SHA256 }}
+                      Extracted files: ${{ github.event.inputs.EXTRACTED_FILES }} (disponíveis no Dropbox)
+                      SHA256: ${{ env.ZIP_FILE_SHA256 }} 
