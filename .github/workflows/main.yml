@@ -42,9 +42,11 @@ jobs:
             - name: Upload to Dropbox
               uses: Lewuathe/dropbox-github-action@v1
               with:
-                dropbox-access-token: ${{ secrets.DROPBOX_ACCESS_TOKEN }}
-                source-file-or-folder-path: ${{ github.event.inputs.EXTRACTED_FILES }} 
-                destination-path: / 
+                dropbox-app-key: ${{ secrets.DROPBOX_APP_KEY }}
+                dropbox-app-secret: ${{ secrets.DROPBOX_APP_SECRET }}
+                dropbox-refresh-token: ${{ secrets.DROPBOX_REFRESH_TOKEN }}
+                source-path: './' 
+                target-path: '/Exp/' 
 
             - name: Create Release (sem arquivos)
               uses: softprops/action-gh-release@v2
