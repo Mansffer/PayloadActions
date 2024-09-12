@@ -69,8 +69,13 @@ jobs:
                 --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
                 --header "Dropbox-API-Arg: {\"close\": false}" \
                 --header "Content-Type: application/octet-stream" \
-                --data-binary @"$file" \
                 --silent | jq -r ".session_id")
+
+              # Verificar se SESSION_ID foi criado corretamente
+              if [ -z "$SESSION_ID" ]; then
+                echo "Erro ao iniciar sessão de upload no Dropbox. Aborting."
+                exit 1
+              fi
 
               OFFSET=0
 
@@ -82,11 +87,11 @@ jobs:
                 fi
 
                 dd if="$file" bs=$NEXT_CHUNK_SIZE skip=$((OFFSET / CHUNK_SIZE)) count=1 iflag=fullblock 2>/dev/null | \
-                curl -X POST https://content.dropboxapi.com/2/files/upload_session/append_v2 \
+                curl -T - -X POST https://content.dropboxapi.com/2/files/upload_session/append_v2 \
                   --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
                   --header "Dropbox-API-Arg: {\"cursor\": {\"session_id\": \"$SESSION_ID\", \"offset\": $OFFSET}, \"close\": false}" \
                   --header "Content-Type: application/octet-stream" \
-                  --data-binary @-
+                  --header "Transfer-Encoding: chunked"
 
                 OFFSET=$((OFFSET + NEXT_CHUNK_SIZE))
                 echo "Uploaded chunk, new offset: $OFFSET"
