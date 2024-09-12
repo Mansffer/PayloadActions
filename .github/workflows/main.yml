@@ -47,7 +47,7 @@ jobs:
             - name: Upload extracted files to Dropbox (chunked)
               run: |
                 IFS=',' read -ra extracted_files <<< "${{ github.event.inputs.EXTRACTED_FILES }}"
-                CHUNK_SIZE=157286400  # 150 MB por chunk
+                CHUNK_SIZE=52428800  # 50 MB por chunk
                 for file in "${extracted_files[@]}"; do
                   if [ -f "$file" ]; then
                     echo "Uploading $file to Dropbox using chunked upload..."
@@ -70,7 +70,7 @@ jobs:
                         NEXT_CHUNK_SIZE=$CHUNK_SIZE
                       fi
 
-                      dd if="$file" bs=$NEXT_CHUNK_SIZE skip=$((OFFSET / CHUNK_SIZE)) count=1 2>/dev/null | \
+                      dd if="$file" bs=$NEXT_CHUNK_SIZE skip=$((OFFSET / CHUNK_SIZE)) count=1 iflag=fullblock 2>/dev/null | \
                       curl -X POST https://content.dropboxapi.com/2/files/upload_session/append_v2 \
                         --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
                         --header "Dropbox-API-Arg: {\"cursor\": {\"session_id\": \"$SESSION_ID\", \"offset\": $OFFSET}, \"close\": false}" \
