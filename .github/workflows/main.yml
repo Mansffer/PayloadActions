@@ -1,4 +1,4 @@
-name: Extract and Upload to Dropbox
+name: Extract and Upload to Dropbox (Chunked)
 
 on:
     workflow_dispatch:
@@ -21,6 +21,9 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v4
 
+            - name: Install jq
+              run: sudo apt-get install jq
+
             - name: Download file
               run: curl -LJO ${{ github.event.inputs.ROM_URL }}
 
@@ -41,16 +44,48 @@ jobs:
                     fi
                   done
 
-            - name: Upload extracted files to Dropbox
+            - name: Upload extracted files to Dropbox (chunked)
               run: |
                 IFS=',' read -ra extracted_files <<< "${{ github.event.inputs.EXTRACTED_FILES }}"
+                CHUNK_SIZE=157286400  # 150 MB por chunk
                 for file in "${extracted_files[@]}"; do
                   if [ -f "$file" ]; then
-                    curl -X POST https://content.dropboxapi.com/2/files/upload \
+                    echo "Uploading $file to Dropbox using chunked upload..."
+                    FILE_SIZE=$(stat -c%s "$file")
+
+                    # Iniciar upload de sessão
+                    SESSION_ID=$(curl -X POST https://content.dropboxapi.com/2/files/upload_session/start \
                       --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
-                      --header "Dropbox-API-Arg: {\"path\": \"/${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}/$file\",\"mode\": \"add\",\"autorename\": true,\"mute\": false,\"strict_conflict\": false}" \
+                      --header "Dropbox-API-Arg: {\"close\": false}" \
                       --header "Content-Type: application/octet-stream" \
-                      --data-binary @"$file"
+                      --data-binary @"$file" \
+                      --silent | jq -r ".session_id")
+
+                    OFFSET=0
+
+                    # Upload em partes
+                    while [ $OFFSET -lt $FILE_SIZE ]; do
+                      NEXT_CHUNK_SIZE=$((FILE_SIZE - OFFSET))
+                      if [ $NEXT_CHUNK_SIZE -gt $CHUNK_SIZE ]; then
+                        NEXT_CHUNK_SIZE=$CHUNK_SIZE
+                      fi
+
+                      dd if="$file" bs=$NEXT_CHUNK_SIZE skip=$((OFFSET / CHUNK_SIZE)) count=1 2>/dev/null | \
+                      curl -X POST https://content.dropboxapi.com/2/files/upload_session/append_v2 \
+                        --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
+                        --header "Dropbox-API-Arg: {\"cursor\": {\"session_id\": \"$SESSION_ID\", \"offset\": $OFFSET}, \"close\": false}" \
+                        --header "Content-Type: application/octet-stream" \
+                        --data-binary @-
+
+                      OFFSET=$((OFFSET + NEXT_CHUNK_SIZE))
+                      echo "Uploaded chunk, new offset: $OFFSET"
+                    done
+
+                    # Finalizar upload
+                    curl -X POST https://content.dropboxapi.com/2/files/upload_session/finish \
+                      --header "Authorization: Bearer ${{ secrets.DROPBOX_ACCESS_TOKEN }}" \
+                      --header "Dropbox-API-Arg: {\"cursor\": {\"session_id\": \"$SESSION_ID\", \"offset\": $OFFSET}, \"commit\": {\"path\": \"/${{ github.event.inputs.DEVICE_NAME }}-${{ github.run_id }}/$file\", \"mode\": \"add\", \"autorename\": true, \"mute\": false, \"strict_conflict\": false}}" \
+                      --header "Content-Type: application/octet-stream"
                   else
                     echo "File $file does not exist and will not be uploaded."
                   fi
